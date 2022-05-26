@@ -1,0 +1,7 @@
+name: Respawnable Crystals
+version: '${version}'
+main: ro.cofi.respawnablecrystals.RespawnableCrystals
+api-version: 1.18
+prefix: respawnable-crystals
+authors: [ Deathcofi ]
+description: A PaperMC plugin to occasionally regenerate Ender Crystals during the Ender Dragon fight.
