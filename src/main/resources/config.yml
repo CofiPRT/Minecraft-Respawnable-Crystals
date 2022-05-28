@@ -1,0 +1,11 @@
+enabled: true
+timer:
+    min: 30
+    max: 60
+respawn-effects:
+    explosion-particles: true
+    explosion-sound: true
+    beacon-sound: true
+    firework-launch: true
+force-respawn: false
+end-dimension-only: true
