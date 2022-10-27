@@ -1,6 +1,5 @@
 package ro.cofi.respawnablecrystals.command;
 
-import org.apache.commons.lang.StringUtils;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -11,15 +10,16 @@ import org.jetbrains.annotations.NotNull;
 import ro.cofi.respawnablecrystals.RespawnableCrystals;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiPredicate;
+import java.util.function.BiFunction;
 
 public class RSCrystalsCommand implements CommandExecutor {
 
     private static final String RELOAD_RESPONSE = "The config files have been reloaded.";
-    private static final String CLEAR_RESPONSE = "The portal locations have been cleared. Start a new dragon fight to reset them";
+    private static final String CLEAR_RESPONSE =
+        "The portal locations have been cleared. Start a new dragon fight to reset them";
 
-    private static final Map<String, BiPredicate<RSCrystalsCommand, CommandData>> options = new HashMap<>();
+    private static final Map<String, BiFunction<RSCrystalsCommand, CommandData, String>> options = new HashMap<>();
+    private static final Set<BiFunction<RSCrystalsCommand, CommandData, String>> unloggableOptions = new HashSet<>();
 
     static {
         options.put("reload", RSCrystalsCommand::reload);
@@ -28,6 +28,10 @@ public class RSCrystalsCommand implements CommandExecutor {
         options.put("help", RSCrystalsCommand::help);
         options.put("set", RSCrystalsCommand::set);
         options.put("check", RSCrystalsCommand::check);
+
+        unloggableOptions.add(RSCrystalsCommand::list);
+        unloggableOptions.add(RSCrystalsCommand::help);
+        unloggableOptions.add(RSCrystalsCommand::check);
     }
 
     private final RespawnableCrystals plugin;
@@ -41,15 +45,11 @@ public class RSCrystalsCommand implements CommandExecutor {
     }
 
     @Override
-    public boolean onCommand(@NotNull CommandSender sender,
-                             @NotNull Command command,
-                             @NotNull String label,
-                             @NotNull String[] args) {
-
-        BiPredicate<RSCrystalsCommand, CommandData> function;
-        AtomicReference<String> message = new AtomicReference<>();
-
-        CommandData data = new CommandData(sender, command, label, args, message);
+    public boolean onCommand(
+        @NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args
+    ) {
+        BiFunction<RSCrystalsCommand, CommandData, String> function;
+        CommandData data = new CommandData(sender, command, label, args);
 
         if (args.length < 1) {
             function = RSCrystalsCommand::help; // needs at least one parameter, show usage
@@ -59,36 +59,31 @@ public class RSCrystalsCommand implements CommandExecutor {
                 function = RSCrystalsCommand::help; // by default, show usage
         }
 
-        boolean log = function.test(this, data);
-        String finalMessage = plugin.prefixMessage(message.get());
+        String finalMessage = plugin.prefixMessage(function.apply(this, data));
 
         // send the message to the issuer
         sender.sendMessage(finalMessage);
 
-        if (log)
+        if (!unloggableOptions.contains(function))
             plugin.getLogger().info(finalMessage);
 
         return true;
     }
 
-    private boolean reload(CommandData data) {
+    private String reload(CommandData data) {
         plugin.reload();
 
-        data.message.set(RELOAD_RESPONSE);
-
-        return true;
+        return RELOAD_RESPONSE;
     }
 
-    private boolean clear(CommandData data) {
+    private String clear(CommandData data) {
         plugin.getConfigManager().resetCrystalLocations();
         plugin.getCrystalManager().reloadLocations();
 
-        data.message.set(CLEAR_RESPONSE);
-
-        return true;
+        return CLEAR_RESPONSE;
     }
 
-    private boolean list(CommandData data) {
+    private String list(CommandData data) {
         List<String> lines = new ArrayList<>();
 
         lines.add("Crystal Locations:");
@@ -99,34 +94,32 @@ public class RSCrystalsCommand implements CommandExecutor {
         if (lines.size() == 1)
             lines.add("None");
 
-        data.message.set(StringUtils.join(lines, System.lineSeparator() + "> "));
-
-        return false;
+        return String.join("\n> ", lines);
     }
 
-    private boolean help(CommandData data) {
+    private String help(CommandData data) {
         List<String> sortedKeys = new ArrayList<>(options.keySet());
         Collections.sort(sortedKeys);
-        data.message.set(ChatColor.RED + "Usage: /" + data.command.getName() +
-                " <" + StringUtils.join(sortedKeys, "|") + ">");
 
-        return false;
+        return "%sUsage: /%s <%s>".formatted(
+            ChatColor.RED.toString(), data.command.getName(), String.join("|", sortedKeys)
+        );
     }
 
-    private boolean set(CommandData data) {
-        if (data.args.length < 3) {
-            data.message.set(ChatColor.RED + "Usage: /" + data.command.getName() + " " + data.args[0] + " <key> <value>");
-            return true;
-        }
+    private String set(CommandData data) {
+        if (data.args.length < 3)
+            return "%sUsage: /%s %s <key> <value>".formatted(
+                ChatColor.RED.toString(), data.command.getName(), data.args[0]
+            );
 
         String key = data.args[1];
         String value = data.args[2];
 
-        if (!plugin.getConfig().contains(key)) {
-            data.message.set(ChatColor.RED + "Key \"" +
-                    ChatColor.BOLD + key + ChatColor.RESET + ChatColor.RED + "\" doesn't exist");
-            return true;
-        }
+        if (!plugin.getConfig().contains(key))
+            return "%sKey \"%s%s%s\" doesn't exist".formatted(
+                ChatColor.RED.toString(),
+                ChatColor.BOLD.toString(), key, ChatColor.RESET.toString() + ChatColor.RED
+            );
 
         Object existingValue = plugin.getConfig().get(key);
 
@@ -134,13 +127,13 @@ public class RSCrystalsCommand implements CommandExecutor {
         if (existingValue instanceof Boolean) {
             boolean booleanValue = false;
 
-            if (value.equalsIgnoreCase("true")) {
+            if (value.equalsIgnoreCase("true"))
                 booleanValue = true;
-            } else if (!value.equalsIgnoreCase("false")) {
-                data.message.set(ChatColor.RED + "Expected a boolean value (true/false), received \"" +
-                        ChatColor.BOLD + value + ChatColor.RESET + ChatColor.RED + "\"");
-                return true;
-            }
+            else if (!value.equalsIgnoreCase("false"))
+                return "%sExpected a boolean value (true/false), received \"%s%s%s\"".formatted(
+                    ChatColor.RED.toString(),
+                    ChatColor.BOLD.toString(), value, ChatColor.RESET.toString() + ChatColor.RED
+                );
 
             plugin.getConfig().set(key, booleanValue);
         } else if (existingValue instanceof Double) {
@@ -149,9 +142,10 @@ public class RSCrystalsCommand implements CommandExecutor {
             try {
                 doubleValue = Double.parseDouble(value);
             } catch (NumberFormatException e) {
-                data.message.set(ChatColor.RED + "Expected a double value (e.g.: 0.1), received \"" +
-                        ChatColor.BOLD + value + ChatColor.RESET + ChatColor.RED + "\"");
-                return true;
+                return "%sExpected a double value (e.g.: 0.1), received \"%s%s%s\"".formatted(
+                    ChatColor.RED.toString(),
+                    ChatColor.BOLD.toString(), value, ChatColor.RESET.toString() + ChatColor.RED
+                );
             }
 
             plugin.getConfig().set(key, doubleValue);
@@ -161,64 +155,61 @@ public class RSCrystalsCommand implements CommandExecutor {
             try {
                 intValue = Integer.parseInt(value);
             } catch (NumberFormatException e) {
-                data.message.set(ChatColor.RED + "Expected an integer value (e.g.: 1), received \"" +
-                        ChatColor.BOLD + value + ChatColor.RESET + ChatColor.RED + "\"");
-                return true;
+                return "%sExpected an integer value (e.g.: 1), received \"%s%s%s\"".formatted(
+                    ChatColor.RED.toString(),
+                    ChatColor.BOLD.toString(), value, ChatColor.RESET.toString() + ChatColor.RED
+                );
             }
 
             plugin.getConfig().set(key, intValue);
         } else if (existingValue instanceof String) {
             plugin.getConfig().set(key, value);
         } else {
-            data.message.set(ChatColor.RED + "Cannot set value for key \"" +
-                    ChatColor.BOLD + key + ChatColor.RESET + ChatColor.RED + "\"");
-            return true;
+            return "%sCannot set value for key \"%s%s%s\"".formatted(
+                ChatColor.RED.toString(),
+                ChatColor.BOLD.toString(), key, ChatColor.RESET.toString() + ChatColor.RED
+            );
         }
-
-        data.message.set("Successfully changed value for \"" + ChatColor.GOLD + key + ChatColor.RESET + "\" from \"" +
-                ChatColor.GOLD + existingValue + ChatColor.RESET + "\" to \"" +
-                ChatColor.GOLD + value + ChatColor.RESET + "\"");
 
         plugin.saveConfig();
         plugin.reload();
 
-        return true;
+        return "Successfully changed value for \"%s%s%s\" from \"%s%s%s\" to \"%s%s%s\"".formatted(
+            ChatColor.GOLD.toString(), key, ChatColor.RESET.toString(),
+            ChatColor.GOLD.toString(), existingValue, ChatColor.RESET.toString(),
+            ChatColor.GOLD.toString(), value, ChatColor.RESET.toString()
+        );
     }
 
-    private boolean check(CommandData data) {
-        if (data.args.length < 2) {
-            data.message.set(ChatColor.RED + "Usage: /" + data.command.getName() + " " + data.args[0] + " <key>");
-            return false;
-        }
+    private String check(CommandData data) {
+        if (data.args.length < 2)
+            return "%sUsage: /%s %s <key>".formatted(
+                ChatColor.RED.toString(), data.command.getName(), data.args[0]
+            );
 
         String key = data.args[1];
 
-        if (!plugin.getConfig().contains(key)) {
-            data.message.set(ChatColor.RED + "Key \"" +
-                    ChatColor.BOLD + key + ChatColor.RESET + ChatColor.RED + "\" doesn't exist");
-            return false;
-        }
+        if (!plugin.getConfig().contains(key))
+            return "%sKey \"%s%s%s\" doesn't exist".formatted(
+                ChatColor.RED.toString(),
+                ChatColor.BOLD.toString(), key, ChatColor.RESET.toString() + ChatColor.RED
+            );
 
         Object value = plugin.getConfig().get(key);
 
-        if (value == null || value instanceof MemorySection) {
-            data.message.set(ChatColor.RED + "Key \"" +
-                    ChatColor.BOLD + key + ChatColor.RESET + ChatColor.RED + "\" does not have an associated value");
-            return false;
-        }
+        if (value == null || value instanceof MemorySection)
+            return "%sKey \"%s%s%s\" does not have an associated value".formatted(
+                ChatColor.RED.toString(),
+                ChatColor.BOLD.toString(), key, ChatColor.RESET.toString() + ChatColor.RED
+            );
 
-        data.message.set("The value for key \"" + ChatColor.GOLD + key + ChatColor.RESET + "\" is \"" +
-                ChatColor.GOLD + value + ChatColor.RESET + "\"");
-
-        return false;
+        return "The value for key \"%s%s%s\" is \"%s%s%s\"".formatted(
+            ChatColor.GOLD.toString(), key, ChatColor.RESET.toString(),
+            ChatColor.GOLD.toString(), value, ChatColor.RESET.toString()
+        );
     }
 
-    private record CommandData(CommandSender sender,
-                              Command command,
-                              String label,
-                              String[] args,
-                              AtomicReference<String> message) {
-
-    }
+    @SuppressWarnings("squid:S6218") // won't check for equality
+    private record CommandData(CommandSender sender, Command command, String label, String[] args) { }
 
 }

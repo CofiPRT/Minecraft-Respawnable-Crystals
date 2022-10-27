@@ -82,11 +82,12 @@ public class CrystalManager {
             Vector crystalLocation = shuffledCrystals.get(attempts);
 
             // if a crystal already exists at this location, don't spawn another one
-            Location loc = new Location(endWorld, crystalLocation.getX(), crystalLocation.getY(), crystalLocation.getZ());
-            if (endWorld.getNearbyEntities(loc, 1, 1, 1, entity -> entity instanceof EnderCrystal).isEmpty()) {
+            Location loc =
+                new Location(endWorld, crystalLocation.getX(), crystalLocation.getY(), crystalLocation.getZ());
+            if (endWorld.getNearbyEntities(loc, 1, 1, 1, EnderCrystal.class::isInstance).isEmpty()) {
                 // spawn a crystal
                 spawnCrystal(loc);
-                break;
+                return;
             }
         }
 
@@ -108,22 +109,22 @@ public class CrystalManager {
 
         // spawn the crystal
         world.spawn(
-                location.add(0.5, 0, 0.5), // to center on the bedrock block
-                EnderCrystal.class,
-                CreatureSpawnEvent.SpawnReason.CUSTOM,
-                crystal -> crystal.setShowingBottom(true)
+            location,
+            EnderCrystal.class,
+            CreatureSpawnEvent.SpawnReason.CUSTOM,
+            crystal -> crystal.setShowingBottom(true)
         );
 
         // special FX
         if (plugin.getConfigManager().isEffectExplosionParticlesEnabled())
             world.spawnParticle(
-                    Particle.EXPLOSION_HUGE,
-                    location,
-                    10,
-                    3, 3, 3,
-                    1,
-                    null,
-                    true
+                Particle.EXPLOSION_HUGE,
+                location,
+                10,
+                3, 3, 3,
+                1,
+                null,
+                true
             );
 
         if (plugin.getConfigManager().isEffectExplosionSoundEnabled())
@@ -134,23 +135,23 @@ public class CrystalManager {
 
         if (plugin.getConfigManager().isEffectFireworkLaunchEnabled())
             world.spawn(
-                    location.add(0, 1, 0),
-                    Firework.class,
-                    CreatureSpawnEvent.SpawnReason.CUSTOM,
-                    firework -> {
-                        FireworkMeta fireworkMeta = firework.getFireworkMeta();
-                        fireworkMeta.setPower(1);
-                        fireworkMeta.addEffects(
-                                FireworkEffect.builder()
-                                        .with(FireworkEffect.Type.BALL_LARGE)
-                                        .withFlicker()
-                                        .withTrail()
-                                        .withColor(Color.SILVER, Color.FUCHSIA)
-                                        .withFade(Color.WHITE, Color.FUCHSIA)
-                                        .build()
-                        );
-                        firework.setFireworkMeta(fireworkMeta);
-                    }
+                location.add(0, 1, 0),
+                Firework.class,
+                CreatureSpawnEvent.SpawnReason.CUSTOM,
+                firework -> {
+                    FireworkMeta fireworkMeta = firework.getFireworkMeta();
+                    fireworkMeta.setPower(1);
+                    fireworkMeta.addEffects(
+                        FireworkEffect.builder()
+                            .with(FireworkEffect.Type.BALL_LARGE)
+                            .withFlicker()
+                            .withTrail()
+                            .withColor(Color.SILVER, Color.FUCHSIA)
+                            .withFade(Color.WHITE, Color.FUCHSIA)
+                            .build()
+                    );
+                    firework.setFireworkMeta(fireworkMeta);
+                }
             );
     }
 

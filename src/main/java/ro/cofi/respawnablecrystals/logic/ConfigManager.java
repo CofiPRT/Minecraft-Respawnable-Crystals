@@ -6,13 +6,10 @@ import ro.cofi.respawnablecrystals.RespawnableCrystals;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ConfigManager {
 
-    private static final Pattern COORD_SEPARATOR = Pattern.compile(",");
     private static final String EFFECTS_KEY = "respawn-effects";
     private static final String LOCATIONS_KEY = "crystal-locations";
 
@@ -64,15 +61,10 @@ public class ConfigManager {
             return Collections.emptyList();
 
         return section.getKeys(false)
-                .stream()
-                .flatMap(key -> {
-                    Vector location = stringToVec(key);
-                    if (location == null)
-                        return Stream.empty();
-
-                    return Stream.of(location);
-                })
-                .collect(Collectors.toList());
+            .stream()
+            .map(this::stringToVec)
+            .flatMap(Stream::ofNullable)
+            .toList();
     }
 
     public void saveCrystalLocation(Vector location) {
@@ -86,18 +78,18 @@ public class ConfigManager {
     }
 
     private String vecToString(Vector vec) {
-        return vec.getBlockX() + "," + vec.getBlockY() + "," + vec.getBlockZ();
+        // decimal points are converted to underscores
+        return "%.2f;%.2f;%.2f".formatted(vec.getX(), vec.getY(), vec.getZ()).replace('.', '_');
     }
 
     private Vector stringToVec(String vec) {
-        int[] coords = COORD_SEPARATOR.splitAsStream(vec)
-                .limit(3)
-                .mapToInt(Integer::parseInt)
-                .toArray();
+        double[] coords = Stream.of(vec.split(";"))
+            .mapToDouble(s -> Double.parseDouble(s.replace('_', '.')))
+            .toArray();
 
         if (coords.length < 3) {
             plugin.getLogger().severe(plugin.prefixMessage(
-                    "Invalid coordinates '" + vec + "' in config file."
+                "Invalid coordinates '" + vec + "' in config file."
             ));
             return null;
         }
